@@ -1,5 +1,5 @@
 # Point Cloud Processing and Mesh Reconstruction
-# Processamento de Nuvem de Pontos e Reconstrução de Malha
+
 
 ## Overview (English)
 This repository contains a Python script that processes a point cloud using Open3D. The goal is to apply filtering, normal estimation, and mesh reconstruction to obtain a clean, high-quality 3D model.
@@ -31,6 +31,8 @@ import open3d as o3d
 mesh = o3d.io.read_triangle_mesh("data/mesh_final.ply")
 o3d.visualization.draw_geometries([mesh])
 ```
+
+# Processamento de Nuvem de Pontos e Reconstrução de Malha
 
 ## Visão Geral (Português)
 Este projeto implementa um pipeline para processamento de nuvem de pontos e reconstrução de malha 3D utilizando Open3D. Ele realiza filtragem, downsampling, estima normais e reconstrói a superfície usando o método Poisson. O resultado final é uma malha limpa e de alta qualidade, salva em um arquivo .ply.
