@@ -3,11 +3,11 @@ import open3d as o3d
 import numpy as np
 
 # 1. Carrega a point cloud
-#pcd = o3d.io.read_point_cloud("/home/usuario/Documentos/nuvem teste/ihrmodificado.ply")
+#pcd = o3d.io.read_point_cloud("/yourpath.ply")
 
 def main():
     # PADRÃO CARREGAMENTO DA NUVEM 
-    caminho_ply = "/home/usuario/Documentos/nuvem teste/ihrmodificado.ply"  
+    caminho_ply = "/yourpath.ply"  
     pcd = o3d.io.read_point_cloud(caminho_ply)
     if not pcd.has_points():
         print("Erro: não foi possível carregar a nuvem de pontos ou ela está vazia!")
