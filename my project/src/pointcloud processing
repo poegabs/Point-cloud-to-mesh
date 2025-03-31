@@ -1,0 +1,125 @@
+```python
+import open3d as o3d
+import numpy as np
+
+# 1. Carrega a point cloud
+#pcd = o3d.io.read_point_cloud("/home/usuario/Documentos/nuvem teste/ihrmodificado.ply")
+
+def main():
+    # PADRÃO CARREGAMENTO DA NUVEM 
+    caminho_ply = "/home/usuario/Documentos/nuvem teste/ihrmodificado.ply"  
+    pcd = o3d.io.read_point_cloud(caminho_ply)
+    if not pcd.has_points():
+        print("Erro: não foi possível carregar a nuvem de pontos ou ela está vazia!")
+        return
+
+    print(f"Nuvem possui {len(pcd.points)} pontos.")
+    print(f"Nuvem possui cores? {pcd.has_colors()}")
+
+    # FILTRO E SIMPLIFICAÇÃO 
+    pcd, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+
+    # Downsample leve (voxel)
+    bbox_nuvem = pcd.get_axis_aligned_bounding_box()
+    bounds = bbox_nuvem.get_extent()  # .get_extent() retorna (x_range, y_range, z_range)
+    scale = np.max(bounds)
+    voxel_size = scale / 2000.0
+    pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
+
+    print(f"Depois do downsample, a nuvem possui {len(pcd.points)} pontos.")
+
+    # ESTIMAR NORMAIS 
+    radius_normals = scale / 50.0
+    pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(
+        radius=radius_normals,
+        max_nn=30
+    ))
+    pcd.orient_normals_consistent_tangent_plane(k=50)
+
+    # RECONSTRUÇÃO COM O POISSON 
+    depth_poisson = 8  # Aumente se precisar de mais detalhes
+    print(f"Reconstruindo malha (Poisson) com depth={depth_poisson}...")
+    mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
+        pcd,
+        depth=depth_poisson,
+        scale=1.2,
+        linear_fit=False
+    )
+
+    # Antes de qualquer remoção que mude o número de vértices,
+    # convertemos densities para numpy
+    densities = np.asarray(densities)
+
+    # ==========================
+    # 5. Remover vértices por densidade
+    # ==========================
+    # Ex.: remover vértices cujo valor de densidade é abaixo do percentil de 5% (ajuste conforme necessário)
+    dens_thresh = np.quantile(densities, 0.05)
+    print(f"Removendo vértices com densidade < {dens_thresh:.4f}")
+    mask_remove = densities < dens_thresh
+
+    # Importante: nesse momento, o tamanho de 'mask_remove' é igual ao número de vértices do mesh
+    mesh.remove_vertices_by_mask(mask_remove)
+
+    # LIMPAR TOPOLOGIA 
+    mesh.remove_degenerate_triangles()
+    mesh.remove_duplicated_triangles()
+    mesh.remove_duplicated_vertices()
+    mesh.remove_non_manifold_edges()
+
+    # 7. CORTAR CROP VIA BOUNDING BOX
+    bbox = pcd.get_axis_aligned_bounding_box()
+    bbox = bbox.scale(1.05, bbox.get_center())
+    mesh = mesh.crop(bbox)
+
+    # LIMPAR TOPOLOGIA 
+    mesh.remove_degenerate_triangles()
+    mesh.remove_duplicated_triangles()
+    mesh.remove_duplicated_vertices()
+    mesh.remove_non_manifold_edges()
+
+    # REMOVER COMPONENTES DESCONECTADOS MENORES 
+    triangle_clusters, cluster_n_triangles, _ = mesh.cluster_connected_triangles()
+    triangle_clusters = np.asarray(triangle_clusters)
+    cluster_n_triangles = np.asarray(cluster_n_triangles)
+
+    # Exemplo: manter apenas a maior componente
+    largest_cluster_idx = np.argmax(cluster_n_triangles)
+    triangles_to_remove = [
+        i for i, c in enumerate(triangle_clusters)
+        if c != largest_cluster_idx
+    ]
+    mesh.remove_triangles_by_index(triangles_to_remove)
+    mesh.remove_unreferenced_vertices()
+
+    # 9. MAPEAMENTO DAS CORES (se quiser)
+    # PS OBS: (A malha Poisson não coincide exatamente com os pontos originais.
+    # Então percorremos cada vértice da malha e buscamos o ponto mais próximo na nuvem.)
+    if pcd.has_colors():
+        print("Mapeando cores a partir da nuvem original...")
+        pcd_tree = o3d.geometry.KDTreeFlann(pcd)
+        verts = np.asarray(mesh.vertices)
+        new_colors = []
+        for v in verts:
+            _, idx, _ = pcd_tree.search_knn_vector_3d(v, 1)
+            new_colors.append(pcd.colors[idx[0]])
+        mesh.vertex_colors = o3d.utility.Vector3dVector(np.array(new_colors))
+    else:
+        print("Nuvem não tem cores. Usando cinza padrão.")
+        mesh.paint_uniform_color([0.7, 0.7, 0.7])
+
+    # VISUALIZAÇÃO E NORMALS FINAIS
+    mesh = mesh.filter_smooth_laplacian(number_of_iterations=1)
+    mesh.compute_vertex_normals()
+
+    # OLHANDO A MALHA, VER COMO ELA ESTÁ (VISUALIZAÇÃO)
+    print("Visualizando a malha resultante...")
+    o3d.visualization.draw_geometries([mesh])
+
+    # CÓDIGO PARA SALVAR EM ARQUIVO PLY 
+    o3d.io.write_triangle_mesh("teste1999.ply", mesh)
+    print("Malha final salva como 'teste1999.ply'.")
+
+if __name__ == "__main__":
+    main()
+```
